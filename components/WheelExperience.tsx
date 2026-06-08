@@ -11,6 +11,7 @@ import { SpinBar } from "@/components/SpinBar";
 import { useWheel } from "@/lib/useWheel";
 import { deleteItem, removeItem, setWinner as persistWinner } from "@/lib/api";
 import { didISubmit } from "@/lib/storage";
+import { ensureAudio, isMuted, setMuted } from "@/lib/sound";
 import type { Item, Wheel as WheelT } from "@/lib/types";
 
 export function WheelExperience({
@@ -33,6 +34,29 @@ export function WheelExperience({
   const [spinning, setSpinning] = useState(false);
   const [winner, setWinner] = useState<Item | null>(null);
   const [now, setNow] = useState(() => Date.now());
+  const [muted, setMutedState] = useState(false);
+
+  // Sync the mute icon with the stored flag, and unlock audio on first interaction
+  // (browsers block sound until the user gestures — covers guests who only watch).
+  useEffect(() => {
+    // localStorage is client-only; read after mount to avoid a hydration mismatch.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setMutedState(isMuted());
+    const unlock = () => ensureAudio();
+    window.addEventListener("pointerdown", unlock, { once: true });
+    window.addEventListener("keydown", unlock, { once: true });
+    return () => {
+      window.removeEventListener("pointerdown", unlock);
+      window.removeEventListener("keydown", unlock);
+    };
+  }, []);
+
+  function toggleMute() {
+    const next = !muted;
+    setMuted(next);
+    setMutedState(next);
+    if (!next) ensureAudio();
+  }
 
   // A second-resolution clock so the submission window flips live as the deadline passes.
   useEffect(() => {
@@ -129,6 +153,14 @@ export function WheelExperience({
           {items.length} on the wheel
           {wheel.total_submissions > items.length && ` · ${wheel.total_submissions} all-time`}
         </span>
+        <button
+          onClick={toggleMute}
+          className="text-white/45 hover:text-white/80 transition"
+          title={muted ? "Unmute sound" : "Mute sound"}
+          aria-label={muted ? "Unmute sound" : "Mute sound"}
+        >
+          {muted ? "🔇" : "🔊"}
+        </button>
       </div>
       {wheel.submit_deadline && (
         <div className="mt-1 text-sm">

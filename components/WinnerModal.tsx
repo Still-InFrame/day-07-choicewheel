@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import confetti from "canvas-confetti";
 import type { Item } from "@/lib/types";
 import { ClaimForm } from "@/components/ClaimForm";
+import { playCheer } from "@/lib/sound";
 
 function fireConfetti() {
   const end = Date.now() + 1200;
@@ -27,6 +28,7 @@ export function WinnerModal({
 }) {
   useEffect(() => {
     fireConfetti();
+    playCheer();
   }, []);
 
   return (
