@@ -1,0 +1,150 @@
+"use client";
+
+import { useCallback, useEffect, useState } from "react";
+import { Wheel } from "@/components/Wheel";
+import { WinnerModal } from "@/components/WinnerModal";
+import { SubmitForm } from "@/components/SubmitForm";
+import { Countdown } from "@/components/Countdown";
+import { AdminPanel } from "@/components/AdminPanel";
+import { useWheel } from "@/lib/useWheel";
+import { deleteItem, setWinner as persistWinner } from "@/lib/api";
+import { didISubmit } from "@/lib/storage";
+import type { Item, Wheel as WheelT } from "@/lib/types";
+
+export function WheelExperience({
+  mode,
+  adminToken,
+  initialWheel,
+  initialItems,
+}: {
+  mode: "guest" | "admin";
+  adminToken?: string;
+  initialWheel: WheelT;
+  initialItems: Item[];
+}) {
+  const { wheel, items, watchers, spin, sendSpin } = useWheel({
+    wheelId: initialWheel.id,
+    initialWheel,
+    initialItems,
+  });
+
+  const [spinning, setSpinning] = useState(false);
+  const [winner, setWinner] = useState<Item | null>(null);
+  const [now, setNow] = useState(() => Date.now());
+
+  // A second-resolution clock so the submission window flips live as the deadline passes.
+  useEffect(() => {
+    if (!wheel.submit_deadline) return;
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [wheel.submit_deadline]);
+
+  const deadlinePassed = !!wheel.submit_deadline && now > new Date(wheel.submit_deadline).getTime();
+  const windowOpen = wheel.published && wheel.submissions_open && !deadlinePassed;
+
+  // Fired by the Wheel the moment a spin broadcast (incl. our own echo) begins.
+  const handleSpinStart = useCallback(() => {
+    setWinner(null);
+    setSpinning(true);
+  }, []);
+
+  const handleSpinEnd = useCallback((w: Item) => {
+    setSpinning(false);
+    setWinner(w);
+  }, []);
+
+  // Admin-only: pick a winner, persist it (gates claims), then broadcast to all viewers.
+  const handleSpin = useCallback(async () => {
+    if (!adminToken || items.length < 2 || spinning) return;
+    const idx = Math.floor(Math.random() * items.length);
+    const chosen = items[idx];
+    try {
+      await persistWinner(adminToken, chosen.id);
+    } catch {
+      // even if persistence hiccups, still spin; claim gating just won't apply
+    }
+    sendSpin({ winnerItemId: chosen.id, extraTurns: 5, durationMs: 4500, nonce: Date.now() });
+  }, [adminToken, items, spinning, sendSpin]);
+
+  return (
+    <div className="w-full max-w-md mx-auto px-4 py-6 flex flex-col items-center gap-5">
+      <header className="w-full text-center">
+        <h1 className="text-2xl font-bold">
+          {wheel.title}
+          {!wheel.published && (
+            <span className="ml-2 align-middle text-xs font-semibold uppercase tracking-wide rounded-full bg-amber-400/20 border border-amber-300/40 text-amber-200 px-2 py-0.5">
+              Draft
+            </span>
+          )}
+        </h1>
+        <div className="mt-1 flex items-center justify-center gap-3 text-sm text-white/55">
+          <span>👀 {watchers} watching</span>
+          <span aria-hidden>·</span>
+          <span>
+            {items.length} on the wheel
+            {wheel.total_submissions > items.length && ` · ${wheel.total_submissions} all-time`}
+          </span>
+        </div>
+        {wheel.submit_deadline && (
+          <div className="mt-1 text-sm">
+            <Countdown deadline={wheel.submit_deadline} />
+          </div>
+        )}
+      </header>
+
+      <Wheel items={items} spin={spin} onSpinStart={handleSpinStart} onSpinEnd={handleSpinEnd} />
+
+      {mode === "admin" && adminToken && (
+        <AdminPanel
+          wheel={wheel}
+          items={items}
+          adminToken={adminToken}
+          spinning={spinning}
+          onSpin={handleSpin}
+        />
+      )}
+
+      <section className="w-full">
+        <SubmitForm
+          wheelId={wheel.id}
+          disabled={!windowOpen}
+          adminToken={mode === "admin" ? adminToken : undefined}
+        />
+      </section>
+
+      {items.length > 0 && (
+        <ul className="w-full flex flex-wrap gap-2">
+          {items.map((item) => (
+            <li
+              key={item.id}
+              className="cw-slide-in flex items-center gap-2 rounded-full bg-white/5 border border-white/10 pl-2 pr-3 py-1 text-sm"
+            >
+              <span className="inline-block w-3 h-3 rounded-full" style={{ background: item.color }} />
+              <span>{item.label}</span>
+              <span className="text-white/40 text-xs">
+                — {item.submitter_name?.trim() || "Anonymous"}
+              </span>
+              {mode === "admin" && adminToken && (
+                <button
+                  onClick={() => deleteItem(adminToken, item.id).catch(() => {})}
+                  className="ml-1 text-white/40 hover:text-rose-300 text-xs leading-none"
+                  aria-label={`Remove ${item.label}`}
+                >
+                  ✕
+                </button>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {winner && (
+        <WinnerModal
+          winner={winner}
+          isMine={didISubmit(wheel.id, winner.id)}
+          onClose={() => setWinner(null)}
+        />
+      )}
+    </div>
+  );
+}
