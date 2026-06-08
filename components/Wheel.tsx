@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import type { Item, SpinSignal } from "@/lib/types";
 import { playTick } from "@/lib/sound";
 
@@ -8,6 +8,7 @@ const SIZE = 320;
 const R = SIZE / 2;
 const C = SIZE / 2;
 const MIN_TICK_MS = 26; // throttle clicks so a fast spin doesn't overlap them
+const IDLE_DEG_PER_SEC = 14; // gentle attract spin while idle (~26s per turn)
 
 // Point on the rim at `deg` clockwise from the top (12 o'clock).
 function pointAt(deg: number, radius: number): [number, number] {
@@ -28,6 +29,16 @@ function truncate(s: string, n: number): string {
 
 const easeOutQuart = (t: number) => 1 - Math.pow(1 - t, 4);
 
+type SpinJob = {
+  start: number;
+  target: number;
+  t0: number;
+  duration: number;
+  seg: number;
+  winner: Item;
+  lastBoundary: number;
+};
+
 export function Wheel({
   items,
   spin,
@@ -39,14 +50,20 @@ export function Wheel({
   onSpinStart?: () => void;
   onSpinEnd?: (winner: Item) => void;
 }) {
-  const [rotation, setRotation] = useState(0); // resting transform (set at spin end)
   const svgRef = useRef<SVGSVGElement>(null);
   const flipperRef = useRef<HTMLDivElement>(null);
   const rotationRef = useRef(0);
   const lastNonce = useRef<number | null>(null);
-  const rafRef = useRef<number | null>(null);
   const lastTickTime = useRef(0);
   const flapTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const spinJob = useRef<SpinJob | null>(null);
+  const itemsRef = useRef(items);
+  const onSpinEndRef = useRef(onSpinEnd);
+  // Keep the loop's refs current without touching them during render.
+  useEffect(() => {
+    itemsRef.current = items;
+    onSpinEndRef.current = onSpinEnd;
+  });
 
   function flap() {
     const f = flipperRef.current;
@@ -58,13 +75,56 @@ export function Wheel({
     }, 55);
   }
 
+  // One persistent loop: idle = slow drift; spin = eased deceleration with ticks.
+  useEffect(() => {
+    let raf = 0;
+    let last = performance.now();
+    const frame = (now: number) => {
+      const dt = now - last;
+      last = now;
+      let rot = rotationRef.current;
+      const job = spinJob.current;
+
+      if (job) {
+        const t = Math.min(1, (now - job.t0) / job.duration);
+        rot = job.start + (job.target - job.start) * easeOutQuart(t);
+        let passed = false;
+        while (rot - job.lastBoundary >= job.seg) {
+          job.lastBoundary += job.seg;
+          passed = true;
+        }
+        if (passed && now - lastTickTime.current > MIN_TICK_MS) {
+          lastTickTime.current = now;
+          playTick();
+          flap();
+        }
+        if (t >= 1) {
+          rot = job.target;
+          spinJob.current = null; // resume idle drift next frames
+          onSpinEndRef.current?.(job.winner);
+        }
+      } else if (itemsRef.current.length >= 2) {
+        rot += (IDLE_DEG_PER_SEC * dt) / 1000;
+      }
+
+      rotationRef.current = rot;
+      if (svgRef.current) svgRef.current.style.transform = `rotate(${rot}deg)`;
+      raf = requestAnimationFrame(frame);
+    };
+    raf = requestAnimationFrame(frame);
+    return () => {
+      cancelAnimationFrame(raf);
+      if (flapTimer.current) clearTimeout(flapTimer.current);
+    };
+  }, []);
+
+  // A new spin broadcast → set up the spin job (the loop picks it up).
   useEffect(() => {
     if (!spin || spin.nonce === lastNonce.current) return;
     const n = items.length;
     const idx = items.findIndex((i) => i.id === spin.winnerItemId);
     if (n === 0 || idx < 0) return;
     lastNonce.current = spin.nonce;
-    const winner = items[idx];
 
     const seg = 360 / n;
     const centerAngle = idx * seg + seg / 2;
@@ -75,46 +135,8 @@ export function Wheel({
     const target = base + spin.extraTurns * 360 + rmod;
 
     onSpinStart?.();
-    if (rafRef.current) cancelAnimationFrame(rafRef.current);
-
-    const t0 = performance.now();
-    let lastBoundary = start; // rotation of the most recent peg passed
-    const step = (now: number) => {
-      const t = Math.min(1, (now - t0) / spin.durationMs);
-      const rot = start + (target - start) * easeOutQuart(t);
-      if (svgRef.current) svgRef.current.style.transform = `rotate(${rot}deg)`;
-      rotationRef.current = rot;
-
-      // A peg passes the flipper every `seg` degrees → tick + flap (throttled).
-      let passed = false;
-      while (rot - lastBoundary >= seg) {
-        lastBoundary += seg;
-        passed = true;
-      }
-      if (passed && now - lastTickTime.current > MIN_TICK_MS) {
-        lastTickTime.current = now;
-        playTick();
-        flap();
-      }
-
-      if (t < 1) {
-        rafRef.current = requestAnimationFrame(step);
-      } else {
-        rafRef.current = null;
-        rotationRef.current = target;
-        setRotation(target);
-        onSpinEnd?.(winner);
-      }
-    };
-    rafRef.current = requestAnimationFrame(step);
+    spinJob.current = { start, target, t0: performance.now(), duration: spin.durationMs, seg, winner: items[idx], lastBoundary: start };
   }, [spin, items]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  useEffect(() => {
-    return () => {
-      if (rafRef.current) cancelAnimationFrame(rafRef.current);
-      if (flapTimer.current) clearTimeout(flapTimer.current);
-    };
-  }, []);
 
   const n = items.length;
   const seg = n > 0 ? 360 / n : 0;
@@ -123,7 +145,7 @@ export function Wheel({
 
   return (
     <div className="relative" style={{ width: SIZE, height: SIZE }}>
-      {/* flipper — pivots from its tip and flaps as pegs pass */}
+      {/* flipper — pivots from its tip and flaps as pegs pass during a real spin */}
       <div
         ref={flipperRef}
         className="absolute left-1/2 -translate-x-1/2 z-10"
@@ -142,12 +164,14 @@ export function Wheel({
         />
       </div>
 
+      {/* transform is driven imperatively by the animation loop (kept out of the
+          style prop so React re-renders don't reset the rotation). */}
       <svg
         ref={svgRef}
         width={SIZE}
         height={SIZE}
         viewBox={`0 0 ${SIZE} ${SIZE}`}
-        style={{ transform: `rotate(${rotation}deg)`, filter: "drop-shadow(0 8px 24px rgba(0,0,0,0.45))" }}
+        style={{ filter: "drop-shadow(0 8px 24px rgba(0,0,0,0.45))" }}
       >
         <circle cx={C} cy={C} r={R} fill="rgba(255,255,255,0.04)" />
 
