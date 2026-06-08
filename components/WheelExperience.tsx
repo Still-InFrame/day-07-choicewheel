@@ -6,6 +6,7 @@ import { WinnerModal } from "@/components/WinnerModal";
 import { SubmitForm } from "@/components/SubmitForm";
 import { Countdown } from "@/components/Countdown";
 import { AdminPanel } from "@/components/AdminPanel";
+import { AdminHeader } from "@/components/AdminHeader";
 import { SpinBar } from "@/components/SpinBar";
 import { useWheel } from "@/lib/useWheel";
 import { deleteItem, removeItem, setWinner as persistWinner } from "@/lib/api";
@@ -149,12 +150,14 @@ export function WheelExperience({
   );
 
   return (
-    <div className="w-full max-w-md lg:max-w-5xl mx-auto px-4 py-6">
+    <div className="w-full max-w-md lg:max-w-5xl mx-auto px-4">
+      {isAdmin && <AdminHeader wheel={wheel} adminToken={adminToken!} />}
+
       {isAdmin ? (
         // Desktop: wheel hero on the left, one control panel on the right.
         // Mobile: stacks — wheel + SPIN, then the panel (add form first).
-        <div className="lg:grid lg:grid-cols-[1fr_minmax(0,420px)] lg:gap-8 lg:items-start">
-          <div className="flex flex-col items-center gap-5 lg:sticky lg:top-6">{wheelHero}</div>
+        <div className="py-6 lg:grid lg:grid-cols-[1fr_minmax(0,420px)] lg:gap-8 lg:items-start">
+          <div className="flex flex-col items-center gap-5 lg:sticky lg:top-20">{wheelHero}</div>
           <div className="mt-6 lg:mt-0 flex flex-col gap-4">
             {addForm}
             {itemsList}
@@ -162,7 +165,7 @@ export function WheelExperience({
           </div>
         </div>
       ) : (
-        <div className="max-w-md mx-auto flex flex-col items-center gap-5">
+        <div className="py-6 max-w-md mx-auto flex flex-col items-center gap-5">
           {wheelHero}
           <div className="w-full flex flex-col gap-4">
             {addForm}

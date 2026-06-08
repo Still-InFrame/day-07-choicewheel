@@ -110,7 +110,7 @@ export function AdminPanel({
           </div>
         )}
         {!wheel.published && (
-          <p className="mt-2 text-xs text-amber-200/80">Publish the wheel above for this link to work for guests.</p>
+          <p className="mt-2 text-xs text-amber-200/80">Publish the wheel (top-right) for this link to work for guests.</p>
         )}
       </Section>
 
