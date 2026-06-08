@@ -57,6 +57,7 @@ export function Wheel({
   const lastTickTime = useRef(0);
   const flapTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const spinJob = useRef<SpinJob | null>(null);
+  const idleBoundary = useRef(0); // last peg the flipper flapped against while idling
   const itemsRef = useRef(items);
   const onSpinEndRef = useRef(onSpinEnd);
   // Keep the loop's refs current without touching them during render.
@@ -100,11 +101,19 @@ export function Wheel({
         }
         if (t >= 1) {
           rot = job.target;
+          idleBoundary.current = job.target; // resume idle flaps from here
           spinJob.current = null; // resume idle drift next frames
           onSpinEndRef.current?.(job.winner);
         }
       } else if (itemsRef.current.length >= 2) {
         rot += (IDLE_DEG_PER_SEC * dt) / 1000;
+        // Flipper reacts to each peg as it passes — visual only (no sound while idle).
+        const seg = 360 / itemsRef.current.length;
+        if (rot - idleBoundary.current > seg * 3) idleBoundary.current = rot - seg; // avoid a catch-up burst
+        while (rot - idleBoundary.current >= seg) {
+          idleBoundary.current += seg;
+          flap();
+        }
       }
 
       rotationRef.current = rot;
