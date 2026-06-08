@@ -111,56 +111,63 @@ export function WheelExperience({
     />
   );
 
+  const headerBlock = (
+    <header className="w-full text-center">
+      <h1 className="text-2xl font-bold">
+        {wheel.title}
+        {!wheel.published && (
+          <span className="ml-2 align-middle text-xs font-semibold uppercase tracking-wide rounded-full bg-amber-400/20 border border-amber-300/40 text-amber-200 px-2 py-0.5">
+            Draft
+          </span>
+        )}
+      </h1>
+      <div className="mt-1 flex items-center justify-center gap-3 text-sm text-white/55">
+        <span>👀 {watchers} watching</span>
+        <span aria-hidden>·</span>
+        <span>
+          {items.length} on the wheel
+          {wheel.total_submissions > items.length && ` · ${wheel.total_submissions} all-time`}
+        </span>
+      </div>
+      {wheel.submit_deadline && (
+        <div className="mt-1 text-sm">
+          <Countdown deadline={wheel.submit_deadline} />
+        </div>
+      )}
+    </header>
+  );
+
+  // The wheel is the hero: header + wheel + (admin) SPIN. Reused by both layouts.
+  const wheelHero = (
+    <>
+      {headerBlock}
+      <Wheel items={items} spin={spin} onSpinStart={handleSpinStart} onSpinEnd={handleSpinEnd} />
+      {isAdmin && (
+        <SpinBar wheel={wheel} items={items} adminToken={adminToken!} spinning={spinning} onSpin={handleSpin} />
+      )}
+    </>
+  );
+
   return (
     <div className="w-full max-w-md lg:max-w-5xl mx-auto px-4 py-6">
-      {/* Row 1: wheel + spin, centered regardless of page width */}
-      <div className="max-w-md mx-auto flex flex-col items-center gap-5">
-        <header className="w-full text-center">
-          <h1 className="text-2xl font-bold">
-            {wheel.title}
-            {!wheel.published && (
-              <span className="ml-2 align-middle text-xs font-semibold uppercase tracking-wide rounded-full bg-amber-400/20 border border-amber-300/40 text-amber-200 px-2 py-0.5">
-                Draft
-              </span>
-            )}
-          </h1>
-          <div className="mt-1 flex items-center justify-center gap-3 text-sm text-white/55">
-            <span>👀 {watchers} watching</span>
-            <span aria-hidden>·</span>
-            <span>
-              {items.length} on the wheel
-              {wheel.total_submissions > items.length && ` · ${wheel.total_submissions} all-time`}
-            </span>
-          </div>
-          {wheel.submit_deadline && (
-            <div className="mt-1 text-sm">
-              <Countdown deadline={wheel.submit_deadline} />
-            </div>
-          )}
-        </header>
-
-        <Wheel items={items} spin={spin} onSpinStart={handleSpinStart} onSpinEnd={handleSpinEnd} />
-
-        {isAdmin && (
-          <SpinBar wheel={wheel} items={items} adminToken={adminToken!} spinning={spinning} onSpin={handleSpin} />
-        )}
-      </div>
-
-      {/* Row 2: admin = two columns (controls left, add right); guest = single column */}
       {isAdmin ? (
-        <div className="mt-6 grid gap-5 lg:grid-cols-2">
-          <div className="order-2 lg:order-1">
-            <AdminPanel wheel={wheel} items={items} adminToken={adminToken!} />
-          </div>
-          <div className="order-1 lg:order-2 flex flex-col gap-4">
+        // Desktop: wheel hero on the left, one control panel on the right.
+        // Mobile: stacks — wheel + SPIN, then the panel (add form first).
+        <div className="lg:grid lg:grid-cols-[1fr_minmax(0,420px)] lg:gap-8 lg:items-start">
+          <div className="flex flex-col items-center gap-5 lg:sticky lg:top-6">{wheelHero}</div>
+          <div className="mt-6 lg:mt-0 flex flex-col gap-4">
             {addForm}
             {itemsList}
+            <AdminPanel wheel={wheel} items={items} adminToken={adminToken!} />
           </div>
         </div>
       ) : (
-        <div className="mt-6 max-w-md mx-auto flex flex-col gap-4">
-          {addForm}
-          {itemsList}
+        <div className="max-w-md mx-auto flex flex-col items-center gap-5">
+          {wheelHero}
+          <div className="w-full flex flex-col gap-4">
+            {addForm}
+            {itemsList}
+          </div>
         </div>
       )}
 
