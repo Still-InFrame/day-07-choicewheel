@@ -14,6 +14,7 @@ create table if not exists choicewheel_wheels (
   id                  uuid primary key default gen_random_uuid(),
   title               text not null default 'Untitled wheel',
   published           boolean not null default false, -- draft until the creator publishes
+  auto_remove         boolean not null default false, -- elimination mode: drop the winner after each spin
   submissions_open    boolean not null default true,
   submit_deadline     timestamptz,                 -- null = no timer
   total_submissions   integer not null default 0,  -- lifetime, survives deletions
@@ -21,8 +22,9 @@ create table if not exists choicewheel_wheels (
   last_spun_at        timestamptz,
   created_at          timestamptz not null default now()
 );
--- For DBs created before `published` existed:
+-- For DBs created before these columns existed:
 alter table choicewheel_wheels add column if not exists published boolean not null default false;
+alter table choicewheel_wheels add column if not exists auto_remove boolean not null default false;
 
 create table if not exists choicewheel_admin (
   wheel_id    uuid primary key references choicewheel_wheels(id) on delete cascade,
@@ -35,9 +37,11 @@ create table if not exists choicewheel_items (
   label          text not null,
   color          text not null,        -- hsl(...) assigned at insert
   submitter_name text,                  -- null => rendered "Anonymous"
+  is_active      boolean not null default true,  -- false => soft-removed (off the wheel, record kept for claims)
   created_at     timestamptz not null default now()
 );
 create index if not exists choicewheel_items_wheel_idx on choicewheel_items(wheel_id, created_at);
+alter table choicewheel_items add column if not exists is_active boolean not null default true;
 -- FULL so Realtime DELETE events include wheel_id (needed to filter deletes per wheel).
 alter table choicewheel_items replica identity full;
 
@@ -275,6 +279,30 @@ begin
   return v_wheel;
 end; $$;
 
+create or replace function choicewheel_admin_set_auto_remove(p_token uuid, p_auto_remove boolean)
+returns choicewheel_wheels
+language plpgsql security definer set search_path = public as $$
+declare v_wheel_id uuid; v_wheel choicewheel_wheels;
+begin
+  v_wheel_id := choicewheel__wheel_for_token(p_token);
+  if v_wheel_id is null then raise exception 'unauthorized'; end if;
+  update choicewheel_wheels set auto_remove = coalesce(p_auto_remove, auto_remove)
+   where id = v_wheel_id returning * into v_wheel;
+  return v_wheel;
+end; $$;
+
+-- Soft-remove: take an item off the wheel but KEEP the row, so a winner's claim
+-- (which references item_id) still works. Used by elimination mode after a spin.
+create or replace function choicewheel_admin_remove_item(p_token uuid, p_item_id uuid)
+returns void language plpgsql security definer set search_path = public as $$
+declare v_wheel_id uuid;
+begin
+  v_wheel_id := choicewheel__wheel_for_token(p_token);
+  if v_wheel_id is null then raise exception 'unauthorized'; end if;
+  update choicewheel_items set is_active = false
+   where id = p_item_id and wheel_id = v_wheel_id;
+end; $$;
+
 -- ============================== grants ==============================
 -- Expose only the public-facing RPCs to anon. The internal helper stays private.
 grant execute on function
@@ -288,6 +316,8 @@ grant execute on function
   choicewheel_admin_set_winner(uuid, uuid),
   choicewheel_admin_add_item(uuid, text, text),
   choicewheel_admin_set_published(uuid, boolean),
+  choicewheel_admin_set_auto_remove(uuid, boolean),
+  choicewheel_admin_remove_item(uuid, uuid),
   choicewheel_submit_claim(uuid, text, text, text, text),
   choicewheel_admin_get_claims(uuid)
 to anon, authenticated;

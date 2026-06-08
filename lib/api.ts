@@ -37,6 +37,7 @@ export async function getItems(wheelId: string): Promise<Item[]> {
     .from("choicewheel_items")
     .select("*")
     .eq("wheel_id", wheelId)
+    .eq("is_active", true)
     .order("created_at", { ascending: true });
   return unwrap(data, error) as Item[];
 }
@@ -76,6 +77,25 @@ export async function setPublished(token: string, published: boolean): Promise<W
     p_published: published,
   });
   return unwrap(data, error) as Wheel;
+}
+
+export async function setAutoRemove(token: string, autoRemove: boolean): Promise<Wheel> {
+  const sb = createClient();
+  const { data, error } = await sb.rpc("choicewheel_admin_set_auto_remove", {
+    p_token: token,
+    p_auto_remove: autoRemove,
+  });
+  return unwrap(data, error) as Wheel;
+}
+
+// Soft-remove (keeps the row so claims still work) — used by elimination mode.
+export async function removeItem(token: string, itemId: string): Promise<void> {
+  const sb = createClient();
+  const { error } = await sb.rpc("choicewheel_admin_remove_item", {
+    p_token: token,
+    p_item_id: itemId,
+  });
+  if (error) throw new Error(error.message);
 }
 
 export async function updateWheel(

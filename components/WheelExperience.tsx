@@ -7,7 +7,7 @@ import { SubmitForm } from "@/components/SubmitForm";
 import { Countdown } from "@/components/Countdown";
 import { AdminPanel } from "@/components/AdminPanel";
 import { useWheel } from "@/lib/useWheel";
-import { deleteItem, setWinner as persistWinner } from "@/lib/api";
+import { deleteItem, removeItem, setWinner as persistWinner } from "@/lib/api";
 import { didISubmit } from "@/lib/storage";
 import type { Item, Wheel as WheelT } from "@/lib/types";
 
@@ -48,10 +48,18 @@ export function WheelExperience({
     setSpinning(true);
   }, []);
 
-  const handleSpinEnd = useCallback((w: Item) => {
-    setSpinning(false);
-    setWinner(w);
-  }, []);
+  const handleSpinEnd = useCallback(
+    (w: Item) => {
+      setSpinning(false);
+      setWinner(w);
+      // Elimination mode: the creator's client soft-removes the winner so it can't be
+      // picked again. Soft-remove keeps the row, so the winner's claim still works.
+      if (mode === "admin" && adminToken && wheel.auto_remove) {
+        removeItem(adminToken, w.id).catch(() => {});
+      }
+    },
+    [mode, adminToken, wheel.auto_remove],
+  );
 
   // Admin-only: pick a winner, persist it (gates claims), then broadcast to all viewers.
   const handleSpin = useCallback(async () => {

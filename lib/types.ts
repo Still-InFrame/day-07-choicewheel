@@ -2,6 +2,7 @@ export type Wheel = {
   id: string;
   title: string;
   published: boolean;
+  auto_remove: boolean;
   submissions_open: boolean;
   submit_deadline: string | null;
   total_submissions: number;
@@ -16,6 +17,7 @@ export type Item = {
   label: string;
   color: string;
   submitter_name: string | null;
+  is_active: boolean;
   created_at: string;
 };
 

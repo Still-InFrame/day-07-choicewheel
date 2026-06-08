@@ -42,6 +42,19 @@ export function useWheel(opts: { wheelId: string; initialWheel: Wheel; initialIt
       )
       .on(
         "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "choicewheel_items", filter: `wheel_id=eq.${wheelId}` },
+        (payload) => {
+          // Soft-remove (is_active=false) drops the item from the wheel; otherwise upsert.
+          const item = payload.new as Item;
+          setItems((prev) => {
+            if (!item.is_active) return prev.filter((i) => i.id !== item.id);
+            if (prev.some((i) => i.id === item.id)) return prev.map((i) => (i.id === item.id ? item : i));
+            return [...prev, item].sort((a, b) => a.created_at.localeCompare(b.created_at));
+          });
+        },
+      )
+      .on(
+        "postgres_changes",
         { event: "UPDATE", schema: "public", table: "choicewheel_wheels", filter: `id=eq.${wheelId}` },
         (payload) => setWheel(payload.new as Wheel),
       )

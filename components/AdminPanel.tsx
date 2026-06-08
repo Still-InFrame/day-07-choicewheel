@@ -7,6 +7,7 @@ import {
   clearItems,
   deleteWheel,
   getClaims,
+  setAutoRemove,
   setPublished,
   updateWheel,
 } from "@/lib/api";
@@ -59,6 +60,10 @@ export function AdminPanel({
 
   async function toggleOpen() {
     await updateWheel(adminToken, { submissions_open: !wheel.submissions_open });
+  }
+
+  async function toggleAutoRemove() {
+    await setAutoRemove(adminToken, !wheel.auto_remove);
   }
 
   async function togglePublish() {
@@ -186,6 +191,19 @@ export function AdminPanel({
             Clear items
           </button>
         </div>
+        <button
+          onClick={toggleAutoRemove}
+          className="mt-2 w-full flex items-center justify-between rounded-lg bg-white/10 hover:bg-white/20 px-3 py-2 text-sm transition"
+        >
+          <span>Auto-remove the winner after each spin</span>
+          <span
+            className={`ml-2 rounded-full px-2 py-0.5 text-xs font-semibold ${
+              wheel.auto_remove ? "bg-emerald-500/25 text-emerald-200" : "bg-white/10 text-white/50"
+            }`}
+          >
+            {wheel.auto_remove ? "On" : "Off"}
+          </span>
+        </button>
       </Section>
 
       <Section title="Submission timer">
