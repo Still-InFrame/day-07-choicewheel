@@ -6,6 +6,7 @@ import { WinnerModal } from "@/components/WinnerModal";
 import { SubmitForm } from "@/components/SubmitForm";
 import { Countdown } from "@/components/Countdown";
 import { AdminPanel } from "@/components/AdminPanel";
+import { SpinBar } from "@/components/SpinBar";
 import { useWheel } from "@/lib/useWheel";
 import { deleteItem, removeItem, setWinner as persistWinner } from "@/lib/api";
 import { didISubmit } from "@/lib/storage";
@@ -74,85 +75,97 @@ export function WheelExperience({
     sendSpin({ winnerItemId: chosen.id, extraTurns: 5, durationMs: 4500, nonce: Date.now() });
   }, [adminToken, items, spinning, sendSpin]);
 
+  const isAdmin = mode === "admin" && !!adminToken;
+
+  const itemsList =
+    items.length > 0 ? (
+      <ul className="w-full flex flex-wrap gap-2">
+        {items.map((item) => (
+          <li
+            key={item.id}
+            className="cw-slide-in flex items-center gap-2 rounded-full bg-white/5 border border-white/10 pl-2 pr-3 py-1 text-sm"
+          >
+            <span className="inline-block w-3 h-3 rounded-full" style={{ background: item.color }} />
+            <span>{item.label}</span>
+            <span className="text-white/40 text-xs">— {item.submitter_name?.trim() || "Anonymous"}</span>
+            {isAdmin && (
+              <button
+                onClick={() => deleteItem(adminToken!, item.id).catch(() => {})}
+                className="ml-1 text-white/40 hover:text-rose-300 text-xs leading-none"
+                aria-label={`Remove ${item.label}`}
+              >
+                ✕
+              </button>
+            )}
+          </li>
+        ))}
+      </ul>
+    ) : null;
+
+  const addForm = (
+    <SubmitForm
+      wheelId={wheel.id}
+      disabled={!windowOpen}
+      adminToken={isAdmin ? adminToken : undefined}
+      existingLabels={items.map((i) => i.label)}
+    />
+  );
+
   return (
-    <div className="w-full max-w-md mx-auto px-4 py-6 flex flex-col items-center gap-5">
-      <header className="w-full text-center">
-        <h1 className="text-2xl font-bold">
-          {wheel.title}
-          {!wheel.published && (
-            <span className="ml-2 align-middle text-xs font-semibold uppercase tracking-wide rounded-full bg-amber-400/20 border border-amber-300/40 text-amber-200 px-2 py-0.5">
-              Draft
-            </span>
-          )}
-        </h1>
-        <div className="mt-1 flex items-center justify-center gap-3 text-sm text-white/55">
-          <span>👀 {watchers} watching</span>
-          <span aria-hidden>·</span>
-          <span>
-            {items.length} on the wheel
-            {wheel.total_submissions > items.length && ` · ${wheel.total_submissions} all-time`}
-          </span>
-        </div>
-        {wheel.submit_deadline && (
-          <div className="mt-1 text-sm">
-            <Countdown deadline={wheel.submit_deadline} />
-          </div>
-        )}
-      </header>
-
-      <Wheel items={items} spin={spin} onSpinStart={handleSpinStart} onSpinEnd={handleSpinEnd} />
-
-      {mode === "admin" && adminToken && (
-        <AdminPanel
-          wheel={wheel}
-          items={items}
-          adminToken={adminToken}
-          spinning={spinning}
-          onSpin={handleSpin}
-        />
-      )}
-
-      <section className="w-full">
-        <SubmitForm
-          wheelId={wheel.id}
-          disabled={!windowOpen}
-          adminToken={mode === "admin" ? adminToken : undefined}
-          existingLabels={items.map((i) => i.label)}
-        />
-      </section>
-
-      {items.length > 0 && (
-        <ul className="w-full flex flex-wrap gap-2">
-          {items.map((item) => (
-            <li
-              key={item.id}
-              className="cw-slide-in flex items-center gap-2 rounded-full bg-white/5 border border-white/10 pl-2 pr-3 py-1 text-sm"
-            >
-              <span className="inline-block w-3 h-3 rounded-full" style={{ background: item.color }} />
-              <span>{item.label}</span>
-              <span className="text-white/40 text-xs">
-                — {item.submitter_name?.trim() || "Anonymous"}
+    <div className="w-full max-w-md lg:max-w-5xl mx-auto px-4 py-6">
+      {/* Row 1: wheel + spin, centered regardless of page width */}
+      <div className="max-w-md mx-auto flex flex-col items-center gap-5">
+        <header className="w-full text-center">
+          <h1 className="text-2xl font-bold">
+            {wheel.title}
+            {!wheel.published && (
+              <span className="ml-2 align-middle text-xs font-semibold uppercase tracking-wide rounded-full bg-amber-400/20 border border-amber-300/40 text-amber-200 px-2 py-0.5">
+                Draft
               </span>
-              {mode === "admin" && adminToken && (
-                <button
-                  onClick={() => deleteItem(adminToken, item.id).catch(() => {})}
-                  className="ml-1 text-white/40 hover:text-rose-300 text-xs leading-none"
-                  aria-label={`Remove ${item.label}`}
-                >
-                  ✕
-                </button>
-              )}
-            </li>
-          ))}
-        </ul>
+            )}
+          </h1>
+          <div className="mt-1 flex items-center justify-center gap-3 text-sm text-white/55">
+            <span>👀 {watchers} watching</span>
+            <span aria-hidden>·</span>
+            <span>
+              {items.length} on the wheel
+              {wheel.total_submissions > items.length && ` · ${wheel.total_submissions} all-time`}
+            </span>
+          </div>
+          {wheel.submit_deadline && (
+            <div className="mt-1 text-sm">
+              <Countdown deadline={wheel.submit_deadline} />
+            </div>
+          )}
+        </header>
+
+        <Wheel items={items} spin={spin} onSpinStart={handleSpinStart} onSpinEnd={handleSpinEnd} />
+
+        {isAdmin && (
+          <SpinBar wheel={wheel} items={items} adminToken={adminToken!} spinning={spinning} onSpin={handleSpin} />
+        )}
+      </div>
+
+      {/* Row 2: admin = two columns (controls left, add right); guest = single column */}
+      {isAdmin ? (
+        <div className="mt-6 grid gap-5 lg:grid-cols-2">
+          <div className="order-2 lg:order-1">
+            <AdminPanel wheel={wheel} items={items} adminToken={adminToken!} />
+          </div>
+          <div className="order-1 lg:order-2 flex flex-col gap-4">
+            {addForm}
+            {itemsList}
+          </div>
+        </div>
+      ) : (
+        <div className="mt-6 max-w-md mx-auto flex flex-col gap-4">
+          {addForm}
+          {itemsList}
+        </div>
       )}
 
       {winner && (
-        <WinnerModal
-          winner={winner}
-          isMine={didISubmit(wheel.id, winner.id)}
-          onClose={() => setWinner(null)}
-        />
+        <WinnerModal winner={winner} isMine={didISubmit(wheel.id, winner.id)} onClose={() => setWinner(null)} />
       )}
     </div>
   );
