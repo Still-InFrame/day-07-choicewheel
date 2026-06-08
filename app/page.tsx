@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createWheel, deleteWheel } from "@/lib/api";
 import { getMyWheels, saveMyWheel, removeMyWheel, type SavedWheel } from "@/lib/storage";
+import { StatsTicker } from "@/components/StatsTicker";
 
 // Wheels auto-delete 24h after creation (a pg_cron job server-side); mirror that here
 // so the dashboard stops listing ones that have aged out.
@@ -70,6 +71,8 @@ export default function Home() {
           Spin a wheel anyone can add to — live. Share a link, watch items pop on, then spin for a winner.
         </p>
       </div>
+
+      <StatsTicker />
 
       <form onSubmit={handleCreate} className="rounded-2xl bg-white/5 border border-white/10 p-4">
         <label className="block text-sm text-white/60 mb-2">Name your wheel</label>

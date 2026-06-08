@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/client";
-import type { Claim, Item, Wheel } from "@/lib/types";
+import type { Claim, Item, Stats, Wheel } from "@/lib/types";
 
 // Thin wrappers over the SECURITY DEFINER RPCs. Errors from Postgres surface as
 // supabase error.message (e.g. "submissions are closed"); we re-throw them so the
@@ -158,6 +158,17 @@ export async function submitClaim(claim: {
     p_country: claim.country,
   });
   if (error) throw new Error(error.message);
+}
+
+export async function getStats(): Promise<Stats | null> {
+  const sb = createClient();
+  const { data, error } = await sb
+    .from("choicewheel_stats")
+    .select("wheels_created, total_spins")
+    .eq("id", 1)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return data as Stats | null;
 }
 
 export async function getClaims(token: string): Promise<Claim[]> {

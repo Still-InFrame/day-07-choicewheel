@@ -57,6 +57,18 @@ create table if not exists choicewheel_claims (
 );
 create index if not exists choicewheel_claims_wheel_idx on choicewheel_claims(wheel_id, created_at);
 
+-- Lifetime counters (single row id=1). Monotonic — only ever incremented, so they
+-- stay true even when wheels are deleted/expired. Seeded once from the current row count.
+create table if not exists choicewheel_stats (
+  id             int primary key default 1,
+  wheels_created bigint not null default 0,
+  total_spins    bigint not null default 0,
+  constraint choicewheel_stats_single check (id = 1)
+);
+insert into choicewheel_stats (id, wheels_created)
+  values (1, (select count(*) from choicewheel_wheels))
+  on conflict (id) do nothing;
+
 -- ============================== RLS ==============================
 
 alter table choicewheel_wheels enable row level security;
@@ -70,6 +82,11 @@ create policy choicewheel_wheels_read on choicewheel_wheels for select using (tr
 
 drop policy if exists choicewheel_items_read on choicewheel_items;
 create policy choicewheel_items_read on choicewheel_items for select using (true);
+
+-- Stats are public-read (homepage ticker) but only the RPCs (definer) can write them.
+alter table choicewheel_stats enable row level security;
+drop policy if exists choicewheel_stats_read on choicewheel_stats;
+create policy choicewheel_stats_read on choicewheel_stats for select using (true);
 
 -- choicewheel_admin and choicewheel_claims intentionally have NO policies:
 -- RLS-enabled + no policy => no direct access for anon. Reachable only via the
@@ -94,6 +111,7 @@ begin
     returning choicewheel_wheels.id into v_id;
   insert into choicewheel_admin(wheel_id) values (v_id)
     returning choicewheel_admin.admin_token into v_token;
+  update choicewheel_stats set wheels_created = wheels_created + 1 where choicewheel_stats.id = 1;
   return query select v_id, v_token;
 end; $$;
 
@@ -207,6 +225,7 @@ begin
   update choicewheel_wheels
      set last_winner_item_id = p_item_id, last_spun_at = now()
    where id = v_wheel_id;
+  update choicewheel_stats set total_spins = total_spins + 1 where choicewheel_stats.id = 1;
 end; $$;
 
 -- winner-only prize claim. Validates the item is the wheel's CURRENT winner, plus
@@ -342,5 +361,10 @@ do $$ begin
                  where pubname='supabase_realtime' and schemaname='public'
                    and tablename='choicewheel_wheels') then
     alter publication supabase_realtime add table choicewheel_wheels;
+  end if;
+  if not exists (select 1 from pg_publication_tables
+                 where pubname='supabase_realtime' and schemaname='public'
+                   and tablename='choicewheel_stats') then
+    alter publication supabase_realtime add table choicewheel_stats;
   end if;
 end $$;

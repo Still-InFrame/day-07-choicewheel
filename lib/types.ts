@@ -21,6 +21,11 @@ export type Item = {
   created_at: string;
 };
 
+export type Stats = {
+  wheels_created: number;
+  total_spins: number;
+};
+
 export type Claim = {
   id: string;
   wheel_id: string;
