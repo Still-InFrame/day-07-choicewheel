@@ -3,8 +3,20 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { createWheel } from "@/lib/api";
+import { createWheel, deleteWheel } from "@/lib/api";
 import { getMyWheels, saveMyWheel, removeMyWheel, type SavedWheel } from "@/lib/storage";
+
+// Wheels auto-delete 24h after creation (a pg_cron job server-side); mirror that here
+// so the dashboard stops listing ones that have aged out.
+const EXPIRY_MS = 24 * 60 * 60 * 1000;
+
+function expiryLabel(createdAt: number): string {
+  const ms = createdAt + EXPIRY_MS - Date.now();
+  if (ms <= 0) return "expired";
+  const h = Math.floor(ms / 3_600_000);
+  const m = Math.floor((ms % 3_600_000) / 60_000);
+  return h > 0 ? `auto-deletes in ${h}h` : `auto-deletes in ${m}m`;
+}
 
 export default function Home() {
   const router = useRouter();
@@ -14,9 +26,13 @@ export default function Home() {
 
   useEffect(() => {
     // Read this device's wheels after mount (localStorage is client-only; doing this
-    // in an effect avoids a server/client hydration mismatch).
+    // in an effect avoids a server/client hydration mismatch). Drop any that have
+    // passed the 24h expiry (the server has/will delete them).
+    const all = getMyWheels();
+    const live = all.filter((w) => w.createdAt + EXPIRY_MS > Date.now());
+    all.filter((w) => w.createdAt + EXPIRY_MS <= Date.now()).forEach((w) => removeMyWheel(w.id));
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setWheels(getMyWheels());
+    setWheels(live);
   }, []);
 
   async function handleCreate(e: React.FormEvent) {
@@ -33,10 +49,15 @@ export default function Home() {
     }
   }
 
-  function handleForget(id: string) {
-    if (!confirm("Remove this wheel from this device? (It won't be deleted for others.)")) return;
-    removeMyWheel(id);
-    setWheels(getMyWheels());
+  async function handleDelete(w: SavedWheel) {
+    if (!confirm(`Delete "${w.title}" permanently? This removes it for everyone.`)) return;
+    try {
+      await deleteWheel(w.adminToken);
+    } catch {
+      // already gone (e.g. expired) — fall through and remove locally
+    }
+    removeMyWheel(w.id);
+    setWheels((prev) => prev.filter((x) => x.id !== w.id));
   }
 
   return (
@@ -72,12 +93,14 @@ export default function Home() {
 
       {wheels.length > 0 && (
         <section>
-          <h2 className="text-sm uppercase tracking-wide text-white/40 mb-3">Your wheels</h2>
+          <h2 className="text-sm uppercase tracking-wide text-white/40 mb-1">Your wheels</h2>
+          <p className="text-xs text-white/35 mb-3">Wheels auto-delete 24 hours after they&apos;re created.</p>
           <ul className="space-y-2">
             {wheels.map((w) => (
               <li key={w.id} className="flex items-center gap-2 rounded-xl bg-white/5 border border-white/10 p-3">
-                <Link href={`/w/${w.id}/admin?k=${w.adminToken}`} className="flex-1 font-medium hover:text-violet-300">
-                  {w.title}
+                <Link href={`/w/${w.id}/admin?k=${w.adminToken}`} className="flex-1 min-w-0">
+                  <span className="block font-medium hover:text-violet-300 truncate">{w.title}</span>
+                  <span className="block text-xs text-white/35">{expiryLabel(w.createdAt)}</span>
                 </Link>
                 <Link
                   href={`/w/${w.id}`}
@@ -86,9 +109,9 @@ export default function Home() {
                   Guest view
                 </Link>
                 <button
-                  onClick={() => handleForget(w.id)}
-                  className="text-xs text-white/40 hover:text-rose-300 px-1"
-                  aria-label="Forget wheel"
+                  onClick={() => handleDelete(w)}
+                  className="text-sm text-white/40 hover:text-rose-300 px-1"
+                  aria-label={`Delete ${w.title}`}
                 >
                   ✕
                 </button>
