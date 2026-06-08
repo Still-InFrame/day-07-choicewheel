@@ -13,12 +13,22 @@
 }
 
 body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+}
+
+/* Fixed full-viewport gradient layer. Painting the gradient on <body> leaves a
+   seam on pages taller than the viewport; a fixed layer always covers the screen. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
   background:
     radial-gradient(1200px 600px at 50% -10%, #2a1d5e 0%, transparent 60%),
     radial-gradient(900px 500px at 100% 100%, #14324d 0%, transparent 55%),
     var(--background);
-  color: var(--foreground);
-  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
 }
 
 /* A freshly-submitted item slides + pops onto the list/wheel. */

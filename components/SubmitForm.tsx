@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { adminAddItem, submitItem } from "@/lib/api";
 import { addMySubmittedItem } from "@/lib/storage";
+import { findSimilarLabel } from "@/lib/dedup";
 
 // Add-item form. Two modes:
 //  - guest (no adminToken): calls submit_item, window-gated, records the id locally so
@@ -13,14 +14,19 @@ export function SubmitForm({
   wheelId,
   disabled,
   adminToken,
+  existingLabels = [],
 }: {
   wheelId: string;
   disabled: boolean;
   adminToken?: string;
+  existingLabels?: string[];
 }) {
   const [label, setLabel] = useState("");
   const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  // The label the user has been warned is similar — a 2nd Add with the same text adds it anyway.
+  const [confirmFor, setConfirmFor] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
   const isCreator = !!adminToken;
@@ -29,8 +35,26 @@ export function SubmitForm({
     e.preventDefault();
     const trimmed = label.trim();
     if (!trimmed || submitting) return;
-    setSubmitting(true);
     setError(null);
+    setNotice(null);
+
+    // 1. Exact (case-insensitive) duplicate — hard block. Server enforces this too.
+    if (existingLabels.some((l) => l.toLowerCase() === trimmed.toLowerCase())) {
+      setNotice(`"${trimmed}" is already on the wheel 👀`);
+      return;
+    }
+
+    // 2. Fuzzy near-duplicate — soft warning. A 2nd Add with the same text overrides.
+    if (confirmFor !== trimmed.toLowerCase()) {
+      const similar = findSimilarLabel(trimmed, existingLabels);
+      if (similar) {
+        setNotice(`Looks a lot like "${similar}" already on the wheel — tap Add again to add it anyway.`);
+        setConfirmFor(trimmed.toLowerCase());
+        return;
+      }
+    }
+
+    setSubmitting(true);
     try {
       if (isCreator) {
         await adminAddItem(adminToken!, trimmed, name);
@@ -39,8 +63,11 @@ export function SubmitForm({
         addMySubmittedItem(wheelId, item.id);
       }
       setLabel("");
+      setConfirmFor(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not add item");
+      const msg = err instanceof Error ? err.message : "Could not add item";
+      if (msg.includes("already on the wheel")) setNotice(msg);
+      else setError(msg);
     } finally {
       setSubmitting(false);
     }
@@ -59,7 +86,12 @@ export function SubmitForm({
     <form onSubmit={handleSubmit} className="space-y-2">
       <input
         value={label}
-        onChange={(e) => setLabel(e.target.value)}
+        onChange={(e) => {
+          setLabel(e.target.value);
+          if (notice) setNotice(null);
+          if (error) setError(null);
+          if (confirmFor) setConfirmFor(null);
+        }}
         maxLength={60}
         placeholder={isCreator ? "Add your own item…" : "Add an item to the wheel…"}
         className="w-full rounded-lg bg-white/5 border border-white/15 px-3 py-2.5 outline-none focus:border-violet-400"
@@ -80,6 +112,7 @@ export function SubmitForm({
           {submitting ? "…" : "Add"}
         </button>
       </div>
+      {notice && <p className="text-sm text-amber-200">{notice}</p>}
       {error && <p className="text-sm text-rose-300">{error}</p>}
     </form>
   );

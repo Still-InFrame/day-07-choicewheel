@@ -138,13 +138,29 @@ export function AdminPanel({
         </div>
       )}
 
-      <button
-        onClick={onSpin}
-        disabled={items.length < 2 || spinning}
-        className="w-full rounded-xl bg-gradient-to-r from-violet-500 to-fuchsia-500 hover:opacity-90 disabled:opacity-40 font-bold text-lg py-3 transition shadow-lg shadow-fuchsia-500/20"
-      >
-        {spinning ? "Spinning…" : items.length < 2 ? "Add 2+ items to spin" : "SPIN"}
-      </button>
+      <div className="flex gap-2">
+        <button
+          onClick={onSpin}
+          disabled={items.length < 2 || spinning}
+          className="flex-1 rounded-xl bg-gradient-to-r from-violet-500 to-fuchsia-500 hover:opacity-90 disabled:opacity-40 font-bold text-lg py-3 transition shadow-lg shadow-fuchsia-500/20"
+        >
+          {spinning ? "Spinning…" : items.length < 2 ? "Add 2+ items to spin" : "SPIN"}
+        </button>
+        <button
+          onClick={toggleAutoRemove}
+          title="Auto-remove the winner after each spin"
+          className={`shrink-0 rounded-xl px-3 border text-xs font-semibold flex flex-col items-center justify-center gap-0.5 transition ${
+            wheel.auto_remove
+              ? "bg-emerald-500/20 border-emerald-400/40 text-emerald-200"
+              : "bg-white/5 border-white/15 text-white/60 hover:bg-white/10"
+          }`}
+        >
+          <span>Auto-remove</span>
+          <span className={wheel.auto_remove ? "text-emerald-300" : "text-white/40"}>
+            {wheel.auto_remove ? "On" : "Off"}
+          </span>
+        </button>
+      </div>
 
       <Section title="Share with guests (submit + watch only)">
         <div className="flex gap-2">
@@ -191,19 +207,6 @@ export function AdminPanel({
             Clear items
           </button>
         </div>
-        <button
-          onClick={toggleAutoRemove}
-          className="mt-2 w-full flex items-center justify-between rounded-lg bg-white/10 hover:bg-white/20 px-3 py-2 text-sm transition"
-        >
-          <span>Auto-remove the winner after each spin</span>
-          <span
-            className={`ml-2 rounded-full px-2 py-0.5 text-xs font-semibold ${
-              wheel.auto_remove ? "bg-emerald-500/25 text-emerald-200" : "bg-white/10 text-white/50"
-            }`}
-          >
-            {wheel.auto_remove ? "On" : "Off"}
-          </span>
-        </button>
       </Section>
 
       <Section title="Submission timer">

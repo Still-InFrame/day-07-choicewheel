@@ -117,6 +117,7 @@ export function WheelExperience({
           wheelId={wheel.id}
           disabled={!windowOpen}
           adminToken={mode === "admin" ? adminToken : undefined}
+          existingLabels={items.map((i) => i.label)}
         />
       </section>
 

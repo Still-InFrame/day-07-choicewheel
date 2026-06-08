@@ -119,6 +119,10 @@ begin
   end if;
   if v_label is null or length(v_label) = 0 then raise exception 'label required'; end if;
   if length(v_label) > 60 then raise exception 'label too long (max 60)'; end if;
+  if exists (select 1 from choicewheel_items
+             where wheel_id = p_wheel_id and is_active and lower(label) = lower(v_label)) then
+    raise exception '"%" is already on the wheel', v_label;
+  end if;
 
   select count(*) into v_count from choicewheel_items where wheel_id = p_wheel_id;
   if v_count >= 100 then raise exception 'wheel is full (max 100 items)'; end if;
@@ -256,6 +260,10 @@ begin
   if v_wheel_id is null then raise exception 'unauthorized'; end if;
   if v_label is null or length(v_label) = 0 then raise exception 'label required'; end if;
   if length(v_label) > 60 then raise exception 'label too long (max 60)'; end if;
+  if exists (select 1 from choicewheel_items
+             where wheel_id = v_wheel_id and is_active and lower(label) = lower(v_label)) then
+    raise exception '"%" is already on the wheel', v_label;
+  end if;
   select count(*) into v_count from choicewheel_items where wheel_id = v_wheel_id;
   if v_count >= 100 then raise exception 'wheel is full (max 100 items)'; end if;
   if v_name is not null and length(v_name) > 40 then v_name := left(v_name, 40); end if;
